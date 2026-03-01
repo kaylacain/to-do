@@ -117,15 +117,63 @@
       #matrix { grid-template-columns: 1fr; }
       #add-main { flex-wrap: wrap; }
     }
+
+    /* Auth overlay */
+    #auth-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
+    }
+    #auth-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 18px; padding: 40px 36px; width: 100%; max-width: 380px;
+      box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px;
+    }
+    #auth-title {
+      font-family: 'Playfair Display', serif; font-size: 26px;
+      letter-spacing: -0.5px; text-align: center;
+    }
+    #auth-sub { font-size: 14px; color: var(--muted); text-align: center; line-height: 1.5; }
+    #auth-email {
+      width: 100%; background: var(--input-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 11px 14px; font-family: 'DM Sans', sans-serif;
+      font-size: 15px; color: var(--text); outline: none;
+    }
+    #auth-email:focus { border-color: #4a90d9; box-shadow: 0 0 0 3px rgba(74,144,217,0.12); }
+    #auth-email::placeholder { color: var(--muted); }
+    #auth-btn {
+      width: 100%; padding: 11px; border-radius: 8px; border: none;
+      background: var(--text); color: var(--bg); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    #auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #auth-msg { font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
+    #auth-msg.error { color: #e05c3a; }
+    #signout-btn {
+      font-size: 12px; color: var(--muted); background: none; border: 1px solid var(--border);
+      border-radius: 6px; padding: 5px 10px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    }
+    #signout-btn:hover { color: var(--text); border-color: var(--text); }
   </style>
 </head>
 <body class="light">
-<div id="app">
+<div id="auth-overlay" style="display:none">
+  <div id="auth-box">
+    <div id="auth-title">Focus Matrix</div>
+    <p id="auth-sub">Sign in with your email — we'll send you a magic link.</p>
+    <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" />
+    <button id="auth-btn">Send magic link</button>
+    <p id="auth-msg"></p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
   <header id="header">
     <div id="title">Focus Matrix <span>Eisenhower Method</span></div>
     <div id="header-right">
       <div id="sync-dot" title="Syncing…"></div>
       <div id="stats-pill"><strong id="do-count">0</strong> urgent &amp; important</div>
+      <button id="signout-btn">Sign out</button>
       <button id="theme-btn">☽</button>
     </div>
   </header>
@@ -196,6 +244,7 @@
   );
 
   // ── State ───────────────────────────────────────────────────────────────────
+  let currentUser = null;
   let tasks = [];
   let urgent = false;
   let important = false;
@@ -361,9 +410,9 @@
   async function loadTasks() {
     // First purge completed tasks older than 24h
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    await sb.from("tasks").delete().eq("completed", true).lt("completed_at", cutoff);
+    await sb.from("tasks").delete().eq("user_id", currentUser.id).eq("completed", true).lt("completed_at", cutoff);
 
-    const { data, error } = await sb.from("tasks").select("*").order("created_at", { ascending: false });
+    const { data, error } = await sb.from("tasks").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: false });
     if (error) { console.error("Load error:", error); return; }
     tasks = data || [];
     document.getElementById("loading").style.display = "none";
@@ -373,6 +422,7 @@
   async function addTask(text, urg, imp, dueDate, notes) {
     const task = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      user_id: currentUser.id,
       text,
       urgent: urg,
       important: imp,
@@ -413,6 +463,68 @@
     const { error } = await sb.from("tasks").update({ urgent: newUrgent, important: newImportant }).eq("id", id);
     if (error) console.error("Move error:", error);
   }
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  function showApp() {
+    document.getElementById("auth-overlay").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    loadTasks();
+  }
+
+  function showAuthOverlay() {
+    document.getElementById("auth-overlay").style.display = "flex";
+    document.getElementById("app").style.display = "none";
+    tasks = [];
+  }
+
+  async function initAuth() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      currentUser = session.user;
+      showApp();
+    } else {
+      showAuthOverlay();
+    }
+
+    sb.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        currentUser = session.user;
+        showApp();
+      } else {
+        currentUser = null;
+        showAuthOverlay();
+      }
+    });
+  }
+
+  document.getElementById("auth-btn").onclick = async () => {
+    const email = document.getElementById("auth-email").value.trim();
+    if (!email) return;
+    const btn = document.getElementById("auth-btn");
+    const msg = document.getElementById("auth-msg");
+    btn.disabled = true;
+    msg.className = "";
+    msg.textContent = "";
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href }
+    });
+    if (error) {
+      msg.className = "error";
+      msg.textContent = "Error: " + error.message;
+      btn.disabled = false;
+    } else {
+      msg.textContent = "Check your email for a magic link!";
+    }
+  };
+
+  document.getElementById("auth-email").addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("auth-btn").click();
+  });
+
+  document.getElementById("signout-btn").onclick = async () => {
+    await sb.auth.signOut();
+  };
 
   // ── Form ────────────────────────────────────────────────────────────────────
   const taskInput    = document.getElementById("task-input");
@@ -468,7 +580,7 @@
   };
 
   // ── Boot ────────────────────────────────────────────────────────────────────
-  loadTasks();
+  initAuth();
 </script>
 </body>
 </html>
