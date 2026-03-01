@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Matrix — Eisenhower To-Do</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { margin: 0; }
+
+    .app {
+      min-height: 100vh;
+      font-family: 'DM Sans', sans-serif;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* ── Themes ── */
+    .light {
+      --bg: #f5f2ee;
+      --surface: #fdfbf8;
+      --border: #e8e2d9;
+      --text: #1a1814;
+      --muted: #8a8278;
+      --input-bg: #ffffff;
+      --card-bg: #ffffff;
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+      --q-do-bg: #fff8f6;
+      --q-schedule-bg: #f5f8ff;
+      --q-delegate-bg: #fffdf0;
+      --q-eliminate-bg: #f8f8f8;
+    }
+    .dark {
+      --bg: #141210;
+      --surface: #1e1c19;
+      --border: #2e2b27;
+      --text: #f0ebe3;
+      --muted: #7a7570;
+      --input-bg: #252320;
+      --card-bg: #252320;
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+      --q-do-bg: #1f1714;
+      --q-schedule-bg: #131820;
+      --q-delegate-bg: #1e1b0f;
+      --q-eliminate-bg: #1a1a1a;
+    }
+
+    .app-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px 48px; }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 0 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+    .app-title { font-family: 'Playfair Display', serif; font-size: 26px; color: var(--text); letter-spacing: -0.5px; }
+    .app-title span { color: var(--muted); font-size: 14px; font-family: 'DM Sans', sans-serif; font-weight: 400; margin-left: 12px; vertical-align: middle; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .stats-pill { font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; }
+    .stats-pill strong { color: #e05c3a; }
+    .theme-btn { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .theme-btn:hover { background: var(--border); }
+
+    .add-form { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin-bottom: 28px; box-shadow: var(--card-shadow); }
+    .add-main-row { display: flex; gap: 10px; align-items: center; }
+    .add-input { flex: 1; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text); outline: none; transition: border-color 0.2s, box-shadow 0.2s; width: 100%; }
+    .add-input:focus { border-color: #4a90d9; box-shadow: 0 0 0 3px rgba(74,144,217,0.12); }
+    .add-input::placeholder { color: var(--muted); }
+    .toggles { display: flex; gap: 6px; flex-shrink: 0; }
+    .toggle-btn { padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--input-bg); color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .toggle-btn:hover { border-color: var(--text); color: var(--text); }
+    .urgent-active { background: #e05c3a !important; border-color: #e05c3a !important; color: #fff !important; }
+    .important-active { background: #4a90d9 !important; border-color: #4a90d9 !important; color: #fff !important; }
+    .add-btn { padding: 9px 20px; border-radius: 8px; border: none; background: var(--text); color: var(--bg); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; flex-shrink: 0; }
+    .add-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .add-btn:not(:disabled):hover { opacity: 0.8; }
+    .add-secondary-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .quadrant-preview { font-size: 13px; transition: color 0.2s; }
+    .extra-toggle { font-size: 12px; color: var(--muted); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; }
+    .extra-toggle:hover { color: var(--text); }
+    .add-extras { display: flex; gap: 10px; margin-top: 10px; }
+    .date-input { flex: 0 0 160px; }
+    .notes-input { resize: none; }
+
+    .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .axis-col-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 6px; text-align: center; }
+    .axis-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+
+    .quadrant { border-radius: 14px; border: 1px solid var(--border); padding: 18px; min-height: 220px; transition: background 0.3s; }
+    .q-do { background: var(--q-do-bg); }
+    .q-schedule { background: var(--q-schedule-bg); }
+    .q-delegate { background: var(--q-delegate-bg); }
+    .q-eliminate { background: var(--q-eliminate-bg); }
+
+    .q-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2px solid var(--q-accent); }
+    .q-title-row { display: flex; align-items: center; gap: 10px; }
+    .q-emoji { font-size: 20px; }
+    .q-label { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--text); }
+    .q-subtitle { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .q-count { font-size: 20px; font-weight: 700; color: var(--q-accent); font-variant-numeric: tabular-nums; }
+    .q-empty { text-align: center; color: var(--muted); font-size: 13px; padding: 28px 0; opacity: 0.6; }
+    .q-tasks { display: flex; flex-direction: column; gap: 8px; }
+
+    .task-card { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--q-accent); border-radius: 8px; padding: 10px 12px; box-shadow: var(--card-shadow); transition: opacity 0.5s, transform 0.5s; }
+    .task-fading { opacity: 0 !important; transform: translateX(12px); }
+    .task-row { display: flex; align-items: flex-start; gap: 10px; }
+    .check-btn { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border); background: none; cursor: pointer; flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; color: #fff; }
+    .check-btn:hover { border-color: var(--q-accent); }
+    .check-btn.checked { background: var(--q-accent); border-color: var(--q-accent); }
+    .task-body { flex: 1; min-width: 0; }
+    .task-text { font-size: 14px; color: var(--text); line-height: 1.4; display: block; }
+    .line-through { text-decoration: line-through; color: var(--muted); }
+    .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .due-tag { font-size: 11px; color: var(--muted); background: var(--bg); border-radius: 4px; padding: 1px 6px; }
+    .due-tag.overdue { color: #e05c3a; font-weight: 600; }
+    .notes-toggle { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; }
+    .notes-toggle:hover { color: var(--text); }
+    .task-notes { margin-top: 6px; font-size: 12px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 8px; line-height: 1.5; }
+    .delete-btn { color: var(--muted); background: none; border: none; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; opacity: 0; transition: opacity 0.15s, color 0.15s; flex-shrink: 0; }
+    .task-card:hover .delete-btn { opacity: 1; }
+    .delete-btn:hover { color: #e05c3a; }
+
+    @media (max-width: 700px) {
+      .matrix { grid-template-columns: 1fr; }
+      .add-main-row { flex-wrap: wrap; }
+      .toggles { order: 2; }
+      .add-btn { order: 3; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    const STORAGE_KEY = "eisenhower-tasks-v1";
+    const THEME_KEY = "eisenhower-theme-v1";
+
+    function loadTasks() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+      catch { return []; }
+    }
+    function saveTasks(tasks) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {}
+    }
+    function loadTheme() {
+      return localStorage.getItem(THEME_KEY) || "light";
+    }
+    function saveTheme(theme) {
+      try { localStorage.setItem(THEME_KEY, theme); } catch {}
+    }
+
+    const QUADRANTS = [
+      { id: "do",       label: "Do First",  subtitle: "Urgent & Important",       urgent: true,  important: true,  accent: "#e05c3a", bg: "q-do",       tag: "🔥" },
+      { id: "schedule", label: "Schedule",  subtitle: "Important, Not Urgent",     urgent: false, important: true,  accent: "#4a90d9", bg: "q-schedule", tag: "📅" },
+      { id: "delegate", label: "Delegate",  subtitle: "Urgent, Not Important",     urgent: true,  important: false, accent: "#f0a500", bg: "q-delegate", tag: "📤" },
+      { id: "eliminate",label: "Eliminate", subtitle: "Not Urgent, Not Important", urgent: false, important: false, accent: "#8b8b8b", bg: "q-eliminate", tag: "🗑" },
+    ];
+
+    function getQuadrant(urgent, important) {
+      return QUADRANTS.find(q => q.urgent === urgent && q.important === important);
+    }
+
+    let _id = Date.now();
+    function uid() { return (++_id).toString(36); }
+
+    function TaskCard({ task, quadrant, onComplete, onDelete }) {
+      const [fading, setFading] = useState(false);
+      const [expanded, setExpanded] = useState(false);
+      const isOverdue = task.dueDate && !task.completed && new Date(task.dueDate) < new Date();
+
+      const handleComplete = () => {
+        if (task.completed) return;
+        setFading(true);
+        onComplete(task.id);
+      };
+
+      return (
+        <div
+          className={`task-card${task.completed ? " task-done" : ""}${fading ? " task-fading" : ""}`}
+          style={{ "--q-accent": quadrant.accent }}
+        >
+          <div className="task-row">
+            <button className={`check-btn${task.completed ? " checked" : ""}`} onClick={handleComplete} aria-label="Complete task">
+              {task.completed && (
+                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                  <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
+            <div className="task-body">
+              <span className={`task-text${task.completed ? " line-through" : ""}`}>{task.text}</span>
+              <div className="task-meta">
+                {task.dueDate && (
+                  <span className={`due-tag${isOverdue ? " overdue" : ""}`}>
+                    {isOverdue ? "⚠ " : ""}
+                    {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                )}
+                {task.notes && (
+                  <button className="notes-toggle" onClick={() => setExpanded(!expanded)}>
+                    {expanded ? "▲" : "▼"} note
+                  </button>
+                )}
+              </div>
+              {expanded && task.notes && <div className="task-notes">{task.notes}</div>}
+            </div>
+            <button className="delete-btn" onClick={() => onDelete(task.id)} aria-label="Delete">×</button>
+          </div>
+        </div>
+      );
+    }
+
+    function AddTaskForm({ onAdd }) {
+      const [text, setText] = useState("");
+      const [urgent, setUrgent] = useState(false);
+      const [important, setImportant] = useState(false);
+      const [dueDate, setDueDate] = useState("");
+      const [notes, setNotes] = useState("");
+      const [showExtra, setShowExtra] = useState(false);
+
+      const quadrant = getQuadrant(urgent, important);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!text.trim()) return;
+        onAdd({ id: uid(), text: text.trim(), urgent, important, dueDate: dueDate || null, notes: notes.trim() || null, completed: false, createdAt: Date.now() });
+        setText(""); setDueDate(""); setNotes(""); setShowExtra(false);
+      };
+
+      return (
+        <form className="add-form" onSubmit={handleSubmit}>
+          <div className="add-main-row">
+            <input className="add-input" placeholder="Add a task…" value={text} onChange={e => setText(e.target.value)} autoFocus />
+            <div className="toggles">
+              <button type="button" className={`toggle-btn${urgent ? " urgent-active" : ""}`} onClick={() => setUrgent(!urgent)}>Urgent</button>
+              <button type="button" className={`toggle-btn${important ? " important-active" : ""}`} onClick={() => setImportant(!important)}>Important</button>
+            </div>
+            <button type="submit" className="add-btn" disabled={!text.trim()}>Add</button>
+          </div>
+          <div className="add-secondary-row">
+            <span className="quadrant-preview" style={{ color: quadrant.accent }}>
+              {quadrant.tag} → <strong>{quadrant.label}</strong>
+            </span>
+            <button type="button" className="extra-toggle" onClick={() => setShowExtra(!showExtra)}>
+              {showExtra ? "− fewer options" : "+ due date & notes"}
+            </button>
+          </div>
+          {showExtra && (
+            <div className="add-extras">
+              <input type="date" className="add-input date-input" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              <textarea className="add-input notes-input" placeholder="Notes (optional)…" value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+            </div>
+          )}
+        </form>
+      );
+    }
+
+    function QuadrantColumn({ quadrant, tasks, onComplete, onDelete }) {
+      const active = tasks.filter(t => !t.completed);
+      const done = tasks.filter(t => t.completed);
+      return (
+        <div className={`quadrant ${quadrant.bg}`} style={{ "--q-accent": quadrant.accent }}>
+          <div className="q-header">
+            <div className="q-title-row">
+              <span className="q-emoji">{quadrant.tag}</span>
+              <div>
+                <div className="q-label">{quadrant.label}</div>
+                <div className="q-subtitle">{quadrant.subtitle}</div>
+              </div>
+            </div>
+            <span className="q-count">{active.length}</span>
+          </div>
+          <div className="q-tasks">
+            {active.length === 0 && done.length === 0 && <div className="q-empty">No tasks here</div>}
+            {active.map(t => <TaskCard key={t.id} task={t} quadrant={quadrant} onComplete={onComplete} onDelete={onDelete} />)}
+            {done.map(t => <TaskCard key={t.id} task={t} quadrant={quadrant} onComplete={onComplete} onDelete={onDelete} />)}
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [tasks, setTasks] = useState(() => loadTasks());
+      const [dark, setDark] = useState(() => loadTheme() === "dark");
+
+      useEffect(() => { saveTasks(tasks); }, [tasks]);
+
+      const handleAdd = useCallback(task => setTasks(prev => [task, ...prev]), []);
+
+      const handleComplete = useCallback(id => {
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: true } : t));
+        setTimeout(() => setTasks(prev => prev.filter(t => t.id !== id)), 3000);
+      }, []);
+
+      const handleDelete = useCallback(id => setTasks(prev => prev.filter(t => t.id !== id)), []);
+
+      const handleThemeToggle = () => {
+        const next = !dark;
+        setDark(next);
+        saveTheme(next ? "dark" : "light");
+      };
+
+      const doFirstCount = tasks.filter(t => t.urgent && t.important && !t.completed).length;
+
+      return (
+        <div className={`app ${dark ? "dark" : "light"}`} style={{ background: "var(--bg)", color: "var(--text)" }}>
+          <div className="app-inner">
+            <header className="app-header">
+              <div className="app-title">
+                Focus Matrix
+                <span>Eisenhower Method</span>
+              </div>
+              <div className="header-right">
+                {doFirstCount > 0 && (
+                  <div className="stats-pill"><strong>{doFirstCount}</strong> urgent &amp; important</div>
+                )}
+                <button className="theme-btn" onClick={handleThemeToggle} aria-label="Toggle theme">
+                  {dark ? "☀" : "☽"}
+                </button>
+              </div>
+            </header>
+
+            <AddTaskForm onAdd={handleAdd} />
+
+            <div>
+              <div className="axis-col-labels">
+                <div className="axis-label">→ Urgent</div>
+                <div className="axis-label">→ Not Urgent</div>
+              </div>
+              <div className="matrix">
+                {QUADRANTS.map(q => (
+                  <QuadrantColumn
+                    key={q.id}
+                    quadrant={q}
+                    tasks={tasks.filter(t => t.urgent === q.urgent && t.important === q.important)}
+                    onComplete={handleComplete}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
