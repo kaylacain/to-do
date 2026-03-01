@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Matrix — Eisenhower To-Do</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { margin: 0; }
+    .app { min-height: 100vh; font-family: 'DM Sans', sans-serif; transition: background 0.3s, color 0.3s; }
+
+    .light {
+      --bg: #f5f2ee; --surface: #fdfbf8; --border: #e8e2d9;
+      --text: #1a1814; --muted: #8a8278; --input-bg: #ffffff; --card-bg: #ffffff;
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+      --q-do-bg: #fff8f6; --q-schedule-bg: #f5f8ff;
+      --q-delegate-bg: #fffdf0; --q-eliminate-bg: #f8f8f8;
+    }
+    .dark {
+      --bg: #141210; --surface: #1e1c19; --border: #2e2b27;
+      --text: #f0ebe3; --muted: #7a7570; --input-bg: #252320; --card-bg: #252320;
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+      --q-do-bg: #1f1714; --q-schedule-bg: #131820;
+      --q-delegate-bg: #1e1b0f; --q-eliminate-bg: #1a1a1a;
+    }
+
+    .app-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px 48px; }
+    .app-header { display: flex; align-items: center; justify-content: space-between; padding: 28px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+    .app-title { font-family: 'Playfair Display', serif; font-size: 26px; color: var(--text); letter-spacing: -0.5px; }
+    .app-title span { color: var(--muted); font-size: 14px; font-family: 'DM Sans', sans-serif; font-weight: 400; margin-left: 12px; vertical-align: middle; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .stats-pill { font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; }
+    .stats-pill strong { color: #e05c3a; }
+    .theme-btn { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .theme-btn:hover { background: var(--border); }
+    .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #4a90d9; opacity: 0; transition: opacity 0.3s; }
+    .sync-dot.active { opacity: 1; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .add-form { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin-bottom: 28px; box-shadow: var(--card-shadow); }
+    .add-main-row { display: flex; gap: 10px; align-items: center; }
+    .add-input { flex: 1; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text); outline: none; transition: border-color 0.2s, box-shadow 0.2s; width: 100%; }
+    .add-input:focus { border-color: #4a90d9; box-shadow: 0 0 0 3px rgba(74,144,217,0.12); }
+    .add-input::placeholder { color: var(--muted); }
+    .toggles { display: flex; gap: 6px; flex-shrink: 0; }
+    .toggle-btn { padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--input-bg); color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .toggle-btn:hover { border-color: var(--text); color: var(--text); }
+    .urgent-active { background: #e05c3a !important; border-color: #e05c3a !important; color: #fff !important; }
+    .important-active { background: #4a90d9 !important; border-color: #4a90d9 !important; color: #fff !important; }
+    .add-btn { padding: 9px 20px; border-radius: 8px; border: none; background: var(--text); color: var(--bg); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; flex-shrink: 0; }
+    .add-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .add-btn:not(:disabled):hover { opacity: 0.8; }
+    .add-secondary-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .quadrant-preview { font-size: 13px; transition: color 0.2s; }
+    .extra-toggle { font-size: 12px; color: var(--muted); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; }
+    .extra-toggle:hover { color: var(--text); }
+    .add-extras { display: flex; gap: 10px; margin-top: 10px; }
+    .date-input { flex: 0 0 160px; }
+    .notes-input { resize: none; }
+
+    .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .axis-col-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 6px; text-align: center; }
+    .axis-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+
+    .quadrant { border-radius: 14px; border: 1px solid var(--border); padding: 18px; min-height: 220px; transition: background 0.3s, border-color 0.2s, box-shadow 0.2s; }
+    .q-do       { background: var(--q-do-bg);       --q-accent: #e05c3a; }
+    .q-schedule { background: var(--q-schedule-bg); --q-accent: #4a90d9; }
+    .q-delegate { background: var(--q-delegate-bg); --q-accent: #f0a500; }
+    .q-eliminate{ background: var(--q-eliminate-bg);--q-accent: #8b8b8b; }
+    .quadrant.drag-over { border-color: var(--q-accent); box-shadow: 0 0 0 3px rgba(128,128,128,0.15), inset 0 0 0 1px var(--q-accent); }
+
+    .q-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2px solid var(--q-accent); }
+    .q-title-row { display: flex; align-items: center; gap: 10px; }
+    .q-emoji { font-size: 20px; }
+    .q-label { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--text); }
+    .q-subtitle { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .q-count { font-size: 20px; font-weight: 700; color: var(--q-accent); font-variant-numeric: tabular-nums; }
+    .q-empty { text-align: center; color: var(--muted); font-size: 13px; padding: 28px 0; opacity: 0.6; }
+    .q-tasks { display: flex; flex-direction: column; gap: 8px; min-height: 44px; border-radius: 8px; transition: all 0.15s; }
+    .q-tasks.drop-hint { border: 2px dashed var(--q-accent); opacity: 0.8; }
+
+    .task-card { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--q-accent); border-radius: 8px; padding: 10px 12px; box-shadow: var(--card-shadow); transition: opacity 0.3s, transform 0.3s; cursor: grab; user-select: none; }
+    .task-card:active { cursor: grabbing; }
+    .task-card.is-dragging { opacity: 0.3; transform: scale(0.96); }
+    .task-fading { opacity: 0 !important; transform: translateX(14px) !important; }
+    .task-row { display: flex; align-items: flex-start; gap: 10px; }
+    .check-btn { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border); background: none; cursor: pointer; flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; color: #fff; }
+    .check-btn:hover { border-color: var(--q-accent); }
+    .check-btn.checked { background: var(--q-accent); border-color: var(--q-accent); }
+    .task-body { flex: 1; min-width: 0; }
+    .task-text { font-size: 14px; color: var(--text); line-height: 1.4; display: block; }
+    .line-through { text-decoration: line-through; color: var(--muted); }
+    .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .due-tag { font-size: 11px; color: var(--muted); background: var(--bg); border-radius: 4px; padding: 1px 6px; }
+    .due-tag.overdue { color: #e05c3a; font-weight: 600; }
+    .notes-toggle { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; }
+    .notes-toggle:hover { color: var(--text); }
+    .task-notes { margin-top: 6px; font-size: 12px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 8px; line-height: 1.5; }
+    .delete-btn { color: var(--muted); background: none; border: none; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; opacity: 0; transition: opacity 0.15s, color 0.15s; flex-shrink: 0; }
+    .task-card:hover .delete-btn { opacity: 1; }
+    .delete-btn:hover { color: #e05c3a; }
+
+    .loading-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); }
+    .loading-text { font-family: 'Playfair Display', serif; font-size: 20px; color: var(--muted); }
+
+    @media (max-width: 700px) {
+      .matrix { grid-template-columns: 1fr; }
+      .add-main-row { flex-wrap: wrap; }
+      .toggles { order: 2; }
+      .add-btn { order: 3; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    // ── Supabase client ───────────────────────────────────────────────────────────
+    const SUPABASE_URL = "https://qequilzmqtcwvzudndof.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_nHOABp-89VKVr0qQwPPZfA_QysmEw0Z";
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const THEME_KEY = "eisenhower-theme-v1";
+    function loadTheme() { return localStorage.getItem(THEME_KEY) || "light"; }
+    function saveTheme(t) { try { localStorage.setItem(THEME_KEY, t); } catch {} }
+
+    // DB row ↔ app task conversion
+    function rowToTask(r) {
+      return { id: r.id, text: r.text, urgent: r.urgent, important: r.important, dueDate: r.due_date || null, notes: r.notes || null, completed: r.completed, createdAt: r.created_at };
+    }
+    function taskToRow(t) {
+      return { id: t.id, text: t.text, urgent: t.urgent, important: t.important, due_date: t.dueDate || null, notes: t.notes || null, completed: t.completed, created_at: t.createdAt };
+    }
+
+    const QUADRANTS = [
+      { id:"do",        label:"Do First",  subtitle:"Urgent & Important",        urgent:true,  important:true,  accent:"#e05c3a", bg:"q-do",        tag:"🔥" },
+      { id:"schedule",  label:"Schedule",  subtitle:"Important, Not Urgent",     urgent:false, important:true,  accent:"#4a90d9", bg:"q-schedule",  tag:"📅" },
+      { id:"delegate",  label:"Delegate",  subtitle:"Urgent, Not Important",     urgent:true,  important:false, accent:"#f0a500", bg:"q-delegate",  tag:"📤" },
+      { id:"eliminate", label:"Eliminate", subtitle:"Not Urgent, Not Important", urgent:false, important:false, accent:"#8b8b8b", bg:"q-eliminate", tag:"🗑" },
+    ];
+    function getQuadrant(urgent, important) { return QUADRANTS.find(q => q.urgent===urgent && q.important===important); }
+
+    let _id = Date.now();
+    function uid() { return (++_id).toString(36); }
+
+    // ── TaskCard ──────────────────────────────────────────────────────────────────
+    function TaskCard({ task, quadrant, onComplete, onDelete, draggingId, onDragStart, onDragEnd }) {
+      const [fading, setFading] = useState(false);
+      const [expanded, setExpanded] = useState(false);
+      const isOverdue = task.dueDate && !task.completed && new Date(task.dueDate) < new Date();
+      const isDragging = draggingId === task.id;
+
+      const handleComplete = () => {
+        if (task.completed) return;
+        setFading(true);
+        onComplete(task.id);
+      };
+
+      const handleDragStart = (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", task.id);
+        const el = document.createElement("div");
+        el.style.cssText = "position:fixed;top:-200px;left:0;background:#fff;border:1px solid #ddd;border-radius:8px;padding:8px 14px;font:500 13px 'DM Sans',sans-serif;color:#222;box-shadow:0 4px 16px rgba(0,0,0,0.15);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        el.textContent = task.text;
+        document.body.appendChild(el);
+        e.dataTransfer.setDragImage(el, 16, 16);
+        requestAnimationFrame(() => el.remove());
+        onDragStart(task.id);
+      };
+
+      return (
+        <div
+          className={`task-card${fading?" task-fading":""}${isDragging?" is-dragging":""}`}
+          style={{"--q-accent": quadrant.accent}}
+          draggable={!task.completed}
+          onDragStart={handleDragStart}
+          onDragEnd={onDragEnd}
+        >
+          <div className="task-row">
+            <button className={`check-btn${task.completed?" checked":""}`} onClick={handleComplete}>
+              {task.completed && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
+            <div className="task-body">
+              <span className={`task-text${task.completed?" line-through":""}`}>{task.text}</span>
+              <div className="task-meta">
+                {task.dueDate && <span className={`due-tag${isOverdue?" overdue":""}`}>{isOverdue?"⚠ ":""}{new Date(task.dueDate).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
+                {task.notes && <button className="notes-toggle" onClick={()=>setExpanded(!expanded)}>{expanded?"▲":"▼"} note</button>}
+              </div>
+              {expanded && task.notes && <div className="task-notes">{task.notes}</div>}
+            </div>
+            <button className="delete-btn" onClick={()=>onDelete(task.id)}>×</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── AddTaskForm ───────────────────────────────────────────────────────────────
+    function AddTaskForm({ onAdd }) {
+      const [text, setText] = useState("");
+      const [urgent, setUrgent] = useState(false);
+      const [important, setImportant] = useState(false);
+      const [dueDate, setDueDate] = useState("");
+      const [notes, setNotes] = useState("");
+      const [showExtra, setShowExtra] = useState(false);
+      const q = getQuadrant(urgent, important);
+
+      const submit = (e) => {
+        e.preventDefault();
+        if (!text.trim()) return;
+        onAdd({ id:uid(), text:text.trim(), urgent, important, dueDate:dueDate||null, notes:notes.trim()||null, completed:false, createdAt:Date.now() });
+        setText(""); setDueDate(""); setNotes(""); setShowExtra(false);
+      };
+
+      return (
+        <form className="add-form" onSubmit={submit}>
+          <div className="add-main-row">
+            <input className="add-input" placeholder="Add a task…" value={text} onChange={e=>setText(e.target.value)} autoFocus />
+            <div className="toggles">
+              <button type="button" className={`toggle-btn${urgent?" urgent-active":""}`} onClick={()=>setUrgent(!urgent)}>Urgent</button>
+              <button type="button" className={`toggle-btn${important?" important-active":""}`} onClick={()=>setImportant(!important)}>Important</button>
+            </div>
+            <button type="submit" className="add-btn" disabled={!text.trim()}>Add</button>
+          </div>
+          <div className="add-secondary-row">
+            <span className="quadrant-preview" style={{color:q.accent}}>{q.tag} → <strong>{q.label}</strong></span>
+            <button type="button" className="extra-toggle" onClick={()=>setShowExtra(!showExtra)}>{showExtra?"− fewer options":"+ due date & notes"}</button>
+          </div>
+          {showExtra && (
+            <div className="add-extras">
+              <input type="date" className="add-input date-input" value={dueDate} onChange={e=>setDueDate(e.target.value)} />
+              <textarea className="add-input notes-input" placeholder="Notes (optional)…" value={notes} onChange={e=>setNotes(e.target.value)} rows={2} />
+            </div>
+          )}
+        </form>
+      );
+    }
+
+    // ── QuadrantColumn ────────────────────────────────────────────────────────────
+    function QuadrantColumn({ quadrant, tasks, onComplete, onDelete, onDrop, draggingId, onDragStart, onDragEnd }) {
+      const [isOver, setIsOver] = useState(false);
+      const active = tasks.filter(t=>!t.completed);
+      const done   = tasks.filter(t=> t.completed);
+      const isEmpty = active.length===0 && done.length===0;
+
+      return (
+        <div
+          className={`quadrant ${quadrant.bg}${isOver?" drag-over":""}`}
+          style={{"--q-accent": quadrant.accent}}
+          onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";setIsOver(true);}}
+          onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setIsOver(false);}}
+          onDrop={e=>{e.preventDefault();setIsOver(false);const id=e.dataTransfer.getData("text/plain");if(id)onDrop(id,quadrant.urgent,quadrant.important);}}
+        >
+          <div className="q-header">
+            <div className="q-title-row">
+              <span className="q-emoji">{quadrant.tag}</span>
+              <div><div className="q-label">{quadrant.label}</div><div className="q-subtitle">{quadrant.subtitle}</div></div>
+            </div>
+            <span className="q-count">{active.length}</span>
+          </div>
+          <div className={`q-tasks${isOver&&isEmpty?" drop-hint":""}`}>
+            {isEmpty&&!isOver&&<div className="q-empty">No tasks here</div>}
+            {active.map(t=><TaskCard key={t.id} task={t} quadrant={quadrant} onComplete={onComplete} onDelete={onDelete} draggingId={draggingId} onDragStart={onDragStart} onDragEnd={onDragEnd}/>)}
+            {done.map(t=><TaskCard key={t.id} task={t} quadrant={quadrant} onComplete={onComplete} onDelete={onDelete} draggingId={draggingId} onDragStart={onDragStart} onDragEnd={onDragEnd}/>)}
+          </div>
+        </div>
+      );
+    }
+
+    // ── App ───────────────────────────────────────────────────────────────────────
+    function App() {
+      const [tasks, setTasks]         = useState([]);
+      const [loading, setLoading]     = useState(true);
+      const [syncing, setSyncing]     = useState(false);
+      const [dark, setDark]           = useState(() => loadTheme()==="dark");
+      const [draggingId, setDragging] = useState(null);
+
+      // Load tasks from Supabase on mount
+      useEffect(() => {
+        sb.from("tasks").select("*").order("created_at", {ascending:false})
+          .then(({ data, error }) => {
+            if (!error && data) setTasks(data.map(rowToTask));
+            setLoading(false);
+          });
+      }, []);
+
+      const sync = (fn) => { setSyncing(true); return fn().finally(() => setTimeout(()=>setSyncing(false), 600)); };
+
+      const handleAdd = useCallback(async (task) => {
+        setTasks(p => [task, ...p]);
+        sync(() => sb.from("tasks").insert(taskToRow(task)));
+      }, []);
+
+      const handleComplete = useCallback(async (id) => {
+        setTasks(p => p.map(t => t.id===id ? {...t, completed:true} : t));
+        sync(() => sb.from("tasks").update({completed:true}).eq("id", id));
+        setTimeout(() => {
+          setTasks(p => p.filter(t => t.id!==id));
+          sb.from("tasks").delete().eq("id", id);
+        }, 3000);
+      }, []);
+
+      const handleDelete = useCallback(async (id) => {
+        setTasks(p => p.filter(t => t.id!==id));
+        sync(() => sb.from("tasks").delete().eq("id", id));
+      }, []);
+
+      const handleDragStart = useCallback(id => setDragging(id), []);
+      const handleDragEnd   = useCallback(()  => setDragging(null), []);
+
+      const handleDrop = useCallback(async (id, urgent, important) => {
+        setDragging(null);
+        setTasks(p => p.map(t => t.id===id ? {...t, urgent, important} : t));
+        sync(() => sb.from("tasks").update({urgent, important}).eq("id", id));
+      }, []);
+
+      const toggleTheme = () => { const n=!dark; setDark(n); saveTheme(n?"dark":"light"); };
+      const doFirstCount = tasks.filter(t=>t.urgent&&t.important&&!t.completed).length;
+
+      if (loading) return (
+        <div className={`loading-screen ${dark?"dark":"light"}`}>
+          <div className="loading-text">Loading…</div>
+        </div>
+      );
+
+      return (
+        <div className={`app ${dark?"dark":"light"}`} style={{background:"var(--bg)",color:"var(--text)"}}>
+          <div className="app-inner">
+            <header className="app-header">
+              <div className="app-title">Focus Matrix <span>Eisenhower Method</span></div>
+              <div className="header-right">
+                <div className={`sync-dot${syncing?" active":""}`} title="Syncing…" />
+                {doFirstCount>0&&<div className="stats-pill"><strong>{doFirstCount}</strong> urgent &amp; important</div>}
+                <button className="theme-btn" onClick={toggleTheme}>{dark?"☀":"☽"}</button>
+              </div>
+            </header>
+
+            <AddTaskForm onAdd={handleAdd} />
+
+            <div>
+              <div className="axis-col-labels">
+                <div className="axis-label">→ Urgent</div>
+                <div className="axis-label">→ Not Urgent</div>
+              </div>
+              <div className="matrix">
+                {QUADRANTS.map(q=>(
+                  <QuadrantColumn
+                    key={q.id} quadrant={q}
+                    tasks={tasks.filter(t=>t.urgent===q.urgent&&t.important===q.important)}
+                    onComplete={handleComplete} onDelete={handleDelete}
+                    onDrop={handleDrop} draggingId={draggingId}
+                    onDragStart={handleDragStart} onDragEnd={handleDragEnd}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
