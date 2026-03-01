@@ -124,11 +124,7 @@
       display: flex; align-items: center; justify-content: center;
       background: var(--bg);
     }
-    #auth-box {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 18px; padding: 40px 36px; width: 100%; max-width: 380px;
-      box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px;
-    }
+    #auth-box { /* styles now on .auth-box */ }
     #auth-title {
       font-family: 'Playfair Display', serif; font-size: 26px;
       letter-spacing: -0.5px; text-align: center;
@@ -154,16 +150,46 @@
       border-radius: 6px; padding: 5px 10px; cursor: pointer; font-family: 'DM Sans', sans-serif;
     }
     #signout-btn:hover { color: var(--text); border-color: var(--text); }
+
+    /* View toggle */
+    #view-toggle { display: none; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .view-tab { padding: 6px 14px; border: none; background: var(--surface); color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s, color 0.15s; }
+    .view-tab:hover { color: var(--text); }
+    .view-tab.view-active { background: var(--text); color: var(--bg); }
+
+    /* Shared task owner label */
+    .task-owner { font-size: 11px; color: var(--muted); background: var(--bg); border-radius: 4px; padding: 1px 6px; font-style: italic; }
+
+    /* Household overlay box (reuses layout of auth-box) */
+    .auth-box { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 40px 36px; width: 100%; max-width: 380px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px; }
+    .hh-btn-primary { width: 100%; padding: 11px; border-radius: 8px; border: none; background: var(--text); color: var(--bg); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .hh-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hh-btn-secondary { width: 100%; padding: 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .hh-input { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 11px 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text); outline: none; text-transform: uppercase; letter-spacing: 0.12em; }
+    .hh-input:focus { border-color: #4a90d9; box-shadow: 0 0 0 3px rgba(74,144,217,0.12); }
+    .hh-input::placeholder { text-transform: none; letter-spacing: normal; color: var(--muted); }
+    .hh-divider { display: flex; align-items: center; gap: 8px; }
+    .hh-divider hr { flex: 1; border: none; border-top: 1px solid var(--border); }
+    .hh-divider span { font-size: 12px; color: var(--muted); }
+    .hh-msg { font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
+    .hh-msg.error { color: #e05c3a; }
+    #invite-code-display { font-family: 'Playfair Display', serif; font-size: 36px; letter-spacing: 0.2em; text-align: center; padding: 16px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 10px; user-select: all; }
   </style>
 </head>
 <body class="light">
 <div id="auth-overlay" style="display:none">
-  <div id="auth-box">
+  <div class="auth-box" id="auth-box">
     <div id="auth-title">Focus Matrix</div>
     <p id="auth-sub">Sign in with your email — we'll send you a magic link.</p>
     <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" />
     <button id="auth-btn">Send magic link</button>
     <p id="auth-msg"></p>
+  </div>
+</div>
+
+<div id="household-overlay" style="display:none; position:fixed; inset:0; z-index:90; align-items:center; justify-content:center; background:var(--bg);">
+  <div class="auth-box" id="household-overlay-inner">
+    <!-- content injected by JS -->
   </div>
 </div>
 
@@ -173,6 +199,10 @@
     <div id="header-right">
       <div id="sync-dot" title="Syncing…"></div>
       <div id="stats-pill"><strong id="do-count">0</strong> urgent &amp; important</div>
+      <div id="view-toggle">
+        <button id="view-mine-btn" class="view-tab view-active">Mine</button>
+        <button id="view-shared-btn" class="view-tab">Shared</button>
+      </div>
       <button id="signout-btn">Sign out</button>
       <button id="theme-btn">☽</button>
     </div>
@@ -251,6 +281,9 @@
   let extrasOpen = false;
   let dark = localStorage.getItem("fm-theme") === "dark";
   let dragId = null;
+  let viewMode = 'personal';    // 'personal' | 'shared'
+  let householdId = null;
+  let householdMembers = [];    // [{user_id, display_name}]
 
   const QUADRANT_META = {
     "true-true":   { accent: "#e05c3a", tag: "🔥", label: "Do First" },
@@ -326,6 +359,12 @@
       ? new Date(task.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
       : "";
 
+    let ownerLabel = '';
+    if (viewMode === 'shared' && task.user_id !== currentUser.id) {
+      const member = householdMembers.find(m => m.user_id === task.user_id);
+      if (member) ownerLabel = `<span class="task-owner">${escHtml(member.display_name)}</span>`;
+    }
+
     card.innerHTML = `
       <div class="task-row">
         <button class="check-btn${task.completed ? " done" : ""}" title="Complete">
@@ -334,6 +373,7 @@
         <div class="task-body">
           <span class="task-text${task.completed ? " struck" : ""}">${escHtml(task.text)}</span>
           <div class="task-meta">
+            ${ownerLabel}
             ${task.due_date ? `<span class="due-tag${isOverdue ? " overdue" : ""}">${isOverdue ? "⚠ " : ""}${dueFmt}</span>` : ""}
             ${task.notes ? `<button class="note-toggle">▼ note</button>` : ""}
           </div>
@@ -408,13 +448,18 @@
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
   async function loadTasks() {
-    // First purge completed tasks older than 24h
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    await sb.from("tasks").delete().eq("user_id", currentUser.id).eq("completed", true).lt("completed_at", cutoff);
-
-    const { data, error } = await sb.from("tasks").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: false });
-    if (error) { console.error("Load error:", error); return; }
-    tasks = data || [];
+    if (viewMode === 'personal') {
+      // Purge old completed personal tasks only
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      await sb.from("tasks").delete().eq("user_id", currentUser.id).is("household_id", null).eq("completed", true).lt("completed_at", cutoff);
+      const { data, error } = await sb.from("tasks").select("*").eq("user_id", currentUser.id).is("household_id", null).order("created_at", { ascending: false });
+      if (error) { console.error("Load error:", error); return; }
+      tasks = data || [];
+    } else {
+      const { data, error } = await sb.from("tasks").select("*").eq("household_id", householdId).order("created_at", { ascending: false });
+      if (error) { console.error("Load error:", error); return; }
+      tasks = data || [];
+    }
     document.getElementById("loading").style.display = "none";
     render();
   }
@@ -423,6 +468,7 @@
     const task = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
       user_id: currentUser.id,
+      household_id: viewMode === 'shared' ? householdId : null,
       text,
       urgent: urg,
       important: imp,
@@ -464,11 +510,133 @@
     if (error) console.error("Move error:", error);
   }
 
+  // ── Household ───────────────────────────────────────────────────────────────
+  function generateCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  }
+
+  function showHouseholdOverlay() {
+    renderHouseholdSetup();
+    document.getElementById('household-overlay').style.display = 'flex';
+  }
+
+  function hideHouseholdOverlay() {
+    document.getElementById('household-overlay').style.display = 'none';
+  }
+
+  function showHouseholdError(msg) {
+    const el = document.getElementById('hh-msg');
+    if (el) { el.textContent = msg; el.className = 'hh-msg error'; }
+  }
+
+  function showViewToggle() {
+    document.getElementById('view-toggle').style.display = 'flex';
+  }
+
+  function renderHouseholdSetup() {
+    document.getElementById('household-overlay-inner').innerHTML = `
+      <div id="auth-title">Set Up Household</div>
+      <p id="auth-sub">Create a household or join one with an invite code.</p>
+      <button class="hh-btn-primary" id="create-household-btn">Create a household</button>
+      <div class="hh-divider"><hr /><span>or</span><hr /></div>
+      <input class="hh-input" id="join-code-input" placeholder="Enter 6-character code" maxlength="6" />
+      <button class="hh-btn-secondary" id="join-household-btn">Join with code</button>
+      <p class="hh-msg" id="hh-msg"></p>
+    `;
+    document.getElementById('create-household-btn').onclick = createHousehold;
+    document.getElementById('join-household-btn').onclick = () => joinHousehold(document.getElementById('join-code-input').value);
+    document.getElementById('join-code-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') joinHousehold(document.getElementById('join-code-input').value);
+    });
+    document.getElementById('join-code-input').addEventListener('input', e => {
+      const s = e.target.selectionStart;
+      e.target.value = e.target.value.toUpperCase();
+      e.target.setSelectionRange(s, s);
+    });
+  }
+
+  function showInviteCodeDisplay(code) {
+    document.getElementById('household-overlay-inner').innerHTML = `
+      <div id="auth-title">Your Household</div>
+      <p id="auth-sub">Share this code with your partner:</p>
+      <div id="invite-code-display">${escHtml(code)}</div>
+      <p style="font-size:13px;color:var(--muted);text-align:center">Once they join, you'll both see the Shared view.</p>
+      <button class="hh-btn-primary" id="hh-continue-btn">Got it</button>
+    `;
+    document.getElementById('hh-continue-btn').onclick = () => {
+      hideHouseholdOverlay();
+      showViewToggle();
+      loadTasks();
+    };
+  }
+
+  async function fetchHouseholdMembers() {
+    if (!householdId) return;
+    const { data, error } = await sb.from('household_members').select('user_id, display_name').eq('household_id', householdId);
+    if (!error && data) householdMembers = data;
+  }
+
+  async function fetchHouseholdStatus() {
+    const { data, error } = await sb.from('household_members').select('household_id').eq('user_id', currentUser.id).limit(1).maybeSingle();
+    if (error || !data) { householdId = null; return; }
+    householdId = data.household_id;
+    await fetchHouseholdMembers();
+  }
+
+  async function createHousehold() {
+    const btn = document.getElementById('create-household-btn');
+    btn.disabled = true;
+    const code = generateCode();
+    const { data: hh, error: hhErr } = await sb.from('households').insert({ invite_code: code, created_by: currentUser.id }).select().single();
+    if (hhErr) { showHouseholdError('Could not create: ' + hhErr.message); btn.disabled = false; return; }
+    const { error: memErr } = await sb.from('household_members').insert({ household_id: hh.id, user_id: currentUser.id, display_name: currentUser.email.split('@')[0] });
+    if (memErr) { showHouseholdError('Could not join: ' + memErr.message); btn.disabled = false; return; }
+    householdId = hh.id;
+    await fetchHouseholdMembers();
+    showInviteCodeDisplay(code);
+  }
+
+  async function joinHousehold(code) {
+    const trimmed = code.trim().toUpperCase();
+    if (trimmed.length !== 6) { showHouseholdError('Code must be 6 characters'); return; }
+    const btn = document.getElementById('join-household-btn');
+    btn.disabled = true;
+    const { data: rows, error: lookupErr } = await sb.rpc('get_household_by_code', { code: trimmed });
+    if (lookupErr || !rows || rows.length === 0) { showHouseholdError('Invite code not found'); btn.disabled = false; return; }
+    const hh = rows[0];
+    const { error: memErr } = await sb.from('household_members').insert({ household_id: hh.id, user_id: currentUser.id, display_name: currentUser.email.split('@')[0] });
+    if (memErr && memErr.code !== '23505') { showHouseholdError('Could not join: ' + memErr.message); btn.disabled = false; return; }
+    householdId = hh.id;
+    await fetchHouseholdMembers();
+    hideHouseholdOverlay();
+    showViewToggle();
+    loadTasks();
+  }
+
+  function setViewMode(mode) {
+    viewMode = mode;
+    document.getElementById('view-mine-btn').classList.toggle('view-active', mode === 'personal');
+    document.getElementById('view-shared-btn').classList.toggle('view-active', mode === 'shared');
+    document.getElementById('task-input').placeholder = mode === 'shared' ? 'Add a shared task…' : 'Add a task…';
+    tasks = [];
+    render();
+    loadTasks();
+  }
+
   // ── Auth ────────────────────────────────────────────────────────────────────
-  function showApp() {
+  async function showApp() {
     document.getElementById("auth-overlay").style.display = "none";
     document.getElementById("app").style.display = "block";
-    loadTasks();
+    await fetchHouseholdStatus();
+    if (householdId) {
+      showViewToggle();
+      hideHouseholdOverlay();
+      loadTasks();
+    } else {
+      showHouseholdOverlay();
+      loadTasks();
+    }
   }
 
   function showAuthOverlay() {
@@ -525,6 +693,9 @@
   document.getElementById("signout-btn").onclick = async () => {
     await sb.auth.signOut();
   };
+
+  document.getElementById("view-mine-btn").onclick = () => setViewMode('personal');
+  document.getElementById("view-shared-btn").onclick = () => setViewMode('shared');
 
   // ── Form ────────────────────────────────────────────────────────────────────
   const taskInput    = document.getElementById("task-input");
