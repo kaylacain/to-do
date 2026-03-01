@@ -203,6 +203,7 @@
         <button id="view-mine-btn" class="view-tab view-active">Mine</button>
         <button id="view-shared-btn" class="view-tab">Shared</button>
       </div>
+      <button id="invite-code-btn" style="display:none; font-size:12px; color:var(--muted); background:none; border:1px solid var(--border); border-radius:6px; padding:5px 10px; cursor:pointer; font-family:'DM Sans',sans-serif;">Invite code</button>
       <button id="signout-btn">Sign out</button>
       <button id="theme-btn">☽</button>
     </div>
@@ -270,7 +271,7 @@
   const { createClient } = window.supabase;
   const sb = createClient(
     "https://qequilzmqtcwvzudndof.supabase.co",
-    "sb_publishable_nHOABp-89VKVr0qQwPPZfA_QysmEw0Z"
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlcXVpbHptcXRjd3Z6dWRuZG9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMjA0MjYsImV4cCI6MjA4Nzg5NjQyNn0.-PRQcGtqPL4VzWKkW1fT20l8gre9SEqrSN4kjt0jg70"
   );
 
   // ── State ───────────────────────────────────────────────────────────────────
@@ -532,6 +533,7 @@
 
   function showViewToggle() {
     document.getElementById('view-toggle').style.display = 'flex';
+    document.getElementById('invite-code-btn').style.display = 'block';
   }
 
   function renderHouseholdSetup() {
@@ -696,6 +698,13 @@
 
   document.getElementById("view-mine-btn").onclick = () => setViewMode('personal');
   document.getElementById("view-shared-btn").onclick = () => setViewMode('shared');
+
+  document.getElementById("invite-code-btn").onclick = async () => {
+    const { data, error } = await sb.from('households').select('invite_code').eq('id', householdId).single();
+    if (error || !data) return;
+    showInviteCodeDisplay(data.invite_code);
+    document.getElementById('household-overlay').style.display = 'flex';
+  };
 
   // ── Form ────────────────────────────────────────────────────────────────────
   const taskInput    = document.getElementById("task-input");
